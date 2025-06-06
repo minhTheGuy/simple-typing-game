@@ -33,4 +33,9 @@ build/
 .vscode/
 
 ### secret ###
-backend/src/main/resources/application-secrets.properties
+/src/main/resources/application-secrets.properties
+
+### Environment Variables ###
+.env
+.env.local
+.env.*.local
