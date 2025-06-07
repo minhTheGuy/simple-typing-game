@@ -58,6 +58,14 @@ const handleGameCompleted = async (gameResult: any) => {
 }
 
 onMounted(async () => {
+    // Check for JWT token in URL parameters (from OAuth2 redirect)
+    if (route.query.token) {
+        console.log('Game.vue: Found token in URL, storing...')
+        localStorage.setItem('userToken', route.query.token as string)
+        // Remove token from URL for security
+        window.history.replaceState({}, document.title, window.location.pathname)
+    }
+    
     // Check authentication status
     console.log('Game.vue: Checking auth on mount')
     await checkAuth()

@@ -1,91 +1,80 @@
 import { ref } from 'vue'
-import { useApi } from './useApi'
 import { User } from '../types/user'
 
-// Global authentication state - shared across all components
+// Global authentication state
 const currentUser = ref<User | null>(null)
 const isAuthenticated = ref(false)
+const loading = ref(false)
 
-/**
- * A composable function for managing user authentication.
- * @returns An object containing the current user, authentication status, and methods for checking auth, logging in, registering, and logging out.
- */
 export function useAuth() {
-  const { execute, loading, error, api } = useApi<User>()
-  // Check if user is currently authenticated
+    // Check if user is authenticated via JWT token
   const checkAuth = async () => {
     console.log('🔍 Checking authentication status...')
-    try {
-      const user = await execute(() => api.get('/auth/user'))
-      if (user) {
-        console.log('✅ User authenticated:', user.email || user.username)
-        currentUser.value = user
-        isAuthenticated.value = true
-      } else {
-        console.log('❌ No user data received')
-        currentUser.value = null
-        isAuthenticated.value = false
-      }
-      return user
-    } catch (err) {
-      console.log('❌ Authentication check failed:', err)
+    loading.value = true
+    
+    const token = localStorage.getItem('userToken')
+    if (!token) {
+      console.log('❌ No token found')
       currentUser.value = null
       isAuthenticated.value = false
-      return null
+      loading.value = false
+      return false
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8080/auth/validate?token=${token}`)
+      const data = await response.json()
+      
+      if (data.valid && data.userId) {
+        console.log('✅ Token valid, user authenticated:', data.email)
+        currentUser.value = {
+          id: data.userId,
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          provider: data.provider,
+          role: data.role
+        } as User
+        isAuthenticated.value = true
+        loading.value = false
+        return true
+      } else {
+        console.log('❌ Token invalid')
+        localStorage.removeItem('userToken')
+        currentUser.value = null
+        isAuthenticated.value = false
+        loading.value = false
+        return false
+      }
+    } catch (error) {
+      console.error('❌ Auth check failed:', error)
+      localStorage.removeItem('userToken')
+      currentUser.value = null
+      isAuthenticated.value = false
+      loading.value = false
+      return false
     }
   }
 
-  // Get current user info
+  // Get current user
   const getCurrentUser = () => {
     return currentUser.value
   }
+
   // Logout user
   const logout = async () => {
     console.log('🚪 Logging out user...')
-    try {
-      await api.post('/auth/logout')
-      console.log('✅ Logout API call successful')
-    } catch (err) {
-      console.error('❌ Logout API call failed:', err)
-    } finally {
-      // Always clear the frontend state regardless of API success/failure
-      currentUser.value = null
-      isAuthenticated.value = false
-      console.log('🧹 Frontend authentication state cleared')
-    }
+    localStorage.removeItem('userToken')
+    currentUser.value = null
+    isAuthenticated.value = false
+    console.log('🧹 Authentication state cleared')
   }
-
-  // Login with username/password
-  const login = async (username: string, password: string) => {
-    try {
-      const response = await api.post('/auth/login', { username, password })
-      await checkAuth() // Refresh user info after login
-      return response.data
-    } catch (err) {
-      throw err
-    }
-  }
-
-  // Register new user
-  const register = async (username: string, password: string, email: string) => {
-    try {
-      const response = await api.post('/auth/register', { username, password, email })
-      await checkAuth() // Refresh user info after registration
-      return response.data
-    } catch (err) {
-      throw err
-    }
-  }
-
   return {
     currentUser,
     isAuthenticated,
     loading,
-    error,
     checkAuth,
     getCurrentUser,
-    logout,
-    login,
-    register
+    logout
   }
 }

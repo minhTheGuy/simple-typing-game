@@ -4,6 +4,7 @@ import LoginForm from "../components/LoginForm.vue";
 import Game from "../view/Game.vue";
 import Profile from "../view/Profile.vue";
 import type { Router, RouteRecordRaw } from "vue-router";
+import { useAuth } from "../composables/useAuth";
 
 const routes: RouteRecordRaw[] = [
   {
@@ -34,12 +35,15 @@ const router = createRouter({
   routes,
 });
 
-// Navigation guard example
-router.beforeEach((to, from, next) => {
+// Navigation guard with JWT validation
+router.beforeEach(async (to, from, next) => {
   if (to.meta.requiresAuth) {
-    // Check if user is authenticated
-    const isAuthenticated = localStorage.getItem("userToken");
-    if (!isAuthenticated) {
+    const { isAuthenticated, checkAuth } = useAuth();
+    
+    // Try to validate existing authentication
+    await checkAuth();
+    
+    if (!isAuthenticated.value) {
       next("/login");
     } else {
       next();
