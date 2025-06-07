@@ -9,6 +9,7 @@ import com.minh.simple_typing_game.entity.enums.AuthProvider;
 import com.minh.simple_typing_game.entity.enums.Role;
 import com.minh.simple_typing_game.repository.UserRepository;
 import com.minh.simple_typing_game.service.AuthService;
+import com.minh.simple_typing_game.service.JwtService;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -21,10 +22,9 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 @Transactional
 @Slf4j
-public class AuthServiceImpl implements AuthService {
-
-    private final UserRepository userRepository;
+public class AuthServiceImpl implements AuthService {    private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
 
     @Override
     public String login(String username, String password) {
@@ -33,24 +33,21 @@ public class AuthServiceImpl implements AuthService {
     public User createOrUpdateOAuth2User(OAuth2User oauth2User, String provider) {
         log.debug("Creating/updating OAuth2 user for provider: {}", provider);
         log.debug("OAuth2 user attributes: {}", oauth2User.getAttributes());
-        
-        // Extract user information based on provider
+          // Extract user information based on provider
         String email = oauth2User.getAttribute("email");
-        String providerId = null;
         
         // Extract provider ID based on the specific provider
-        switch (provider) {
-            case "GOOGLE":
-                providerId = oauth2User.getAttribute("sub"); // Google uses 'sub' for user ID
-                break;
-            case "GITHUB":
+        String providerId = switch (provider) {
+            case "GOOGLE" -> oauth2User.getAttribute("sub"); // Google uses 'sub' for user ID
+            case "GITHUB" -> {
                 Object idAttribute = oauth2User.getAttribute("id");
-                providerId = idAttribute != null ? idAttribute.toString() : null;
-                break;
-            default:
+                yield idAttribute != null ? idAttribute.toString() : null;
+            }
+            default -> {
                 Object defaultIdAttribute = oauth2User.getAttribute("id");
-                providerId = defaultIdAttribute != null ? defaultIdAttribute.toString() : null;
-                break;        }
+                yield defaultIdAttribute != null ? defaultIdAttribute.toString() : null;
+            }
+        };
         
         log.debug("Extracted email: {}, providerId: {}", email, providerId);
         
@@ -74,36 +71,40 @@ public class AuthServiceImpl implements AuthService {
         // Email is still required after fallback generation
         if (email == null) {
             throw new IllegalArgumentException("Email could not be determined for OAuth2 user. Provider ID: " + providerId + ", Provider: " + provider);
-        }
-        
+        }        // Handle provider-specific attributes
         String firstName;
         String lastName;
         String imageUrl;
         
-        // Handle provider-specific attributes
-        switch (provider) {
-            case "GOOGLE":
-                firstName = oauth2User.getAttribute("given_name");
-                lastName = oauth2User.getAttribute("family_name");
-                imageUrl = oauth2User.getAttribute("picture");
-                break;
-            case "GITHUB":
-                String name = oauth2User.getAttribute("name");
-                if (name != null && name.contains(" ")) {
-                    String[] nameParts = name.split(" ", 2);
-                    firstName = nameParts[0];
-                    lastName = nameParts[1];
-                } else {
-                    firstName = name;
-                    lastName = null;
+        if (provider != null) {
+            switch (provider) {
+                case "GOOGLE" -> {
+                    firstName = oauth2User.getAttribute("given_name");
+                    lastName = oauth2User.getAttribute("family_name");
+                    imageUrl = oauth2User.getAttribute("picture");
                 }
-                imageUrl = oauth2User.getAttribute("avatar_url");
-                break;
-            default:
-                firstName = oauth2User.getAttribute("name");
-                lastName = null;
-                imageUrl = null;
-                break;
+                case "GITHUB" -> {
+                    String name = oauth2User.getAttribute("name");
+                    if (name != null && name.contains(" ")) {
+                        String[] nameParts = name.split(" ", 2);
+                        firstName = nameParts[0];
+                        lastName = nameParts[1];
+                    } else {
+                        firstName = name;
+                        lastName = null;
+                    }
+                    imageUrl = oauth2User.getAttribute("avatar_url");
+                }
+                default -> {
+                    firstName = oauth2User.getAttribute("name");
+                    lastName = null;
+                    imageUrl = null;
+                }
+            }
+        } else {
+            firstName = oauth2User.getAttribute("name");
+            lastName = null;
+            imageUrl = null;
         }
           AuthProvider authProvider = AuthProvider.valueOf(provider);
         
@@ -153,12 +154,9 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public User findByEmail(String email) {
         return userRepository.findByEmail(email).orElse(null);
-    }
-
-    @Override
+    }    @Override
     public String generateTokenForOAuth2User(User user) {
-        // For now, return a simple token (you can implement JWT later)
-        return "oauth2_token_" + user.getId() + "_" + System.currentTimeMillis();
+        return jwtService.generateToken(user);
     }
 
     @Override
@@ -195,20 +193,18 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(String token) {
 
-    }
-
-    @Override
+    }    @Override
     public boolean validateToken(String token) {
-        return false;
+        return jwtService.validateToken(token);
     }
 
     @Override
     public String getUsernameFromToken(String token) {
-        return null;
+        return jwtService.getEmailFromToken(token);
     }
 
     @Override
     public String getEmailFromToken(String token) {
-        return null;
+        return jwtService.getEmailFromToken(token);
     }
 }
