@@ -105,7 +105,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useAuth } from '../composables/useAuth';
+import { useAuth } from '../composables/useAuth'
 
 interface Props {
   showStats?: boolean
